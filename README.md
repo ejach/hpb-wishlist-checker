@@ -1,4 +1,4 @@
-HPB Wishlist Stock Checker
+HPB Amazon Wishlist Stock Checker
 
 This Python script allows you to:
 
@@ -15,33 +15,28 @@ Features:
 - Checks if books are available for in-store pickup.
 - Outputs a list of stores where each book is in stock.
 
-Requirements:
-
-- Python 3.9+
-- playwright
-- wishlist-core
-
 Installation:
 
 1. Clone this repository or copy the script.
 2. Install dependencies:
    pip install playwright wishlist-core
 3. Install the required browser for Playwright:
-   python -m playwright install
+   `python -m playwright install`
 
 Configuration:
 
-- Set WISHLIST_ID to your Amazon wishlist code.
+- Set WISHLIST_ID to your Amazon wishlist code (Found in the URL, must be public).
 - Set ZIP_CODE to the ZIP code for nearby HPB stores.
 - Set HEADLESS to False to watch the browser actions.
 
 Usage:
 
 Run the script:
-python stores.py
+`python stores.py`
 
 Example output:
 
+```bash
 These are the stores in the zip code 46204: Half Price Books Downtown, HPB Clearwater Village, HPB Broad Ripple
 
 In-stock at these stores:
@@ -54,4 +49,4 @@ Notes:
 - HPB’s site dynamically loads content via JavaScript. Playwright ensures that the page fully renders before checking for stock.
 - The script currently checks in-store availability only (pickup at the store).
 - For best results, keep HEADLESS=False when debugging.
-
+```
