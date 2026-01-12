@@ -1,57 +1,69 @@
-HPB Wishlist Stock Checker
+## HPB Wishlist Stock Checker
+[![PyPI](https://img.shields.io/pypi/v/cloudscraper?logo=python&label=cloudscraper&style=flat-square&color=FFD43B)](https://pypi.org/project/cloudscraper/)
+[![PyPI](https://img.shields.io/pypi/v/beautifulsoup4?logo=python&label=beautifulsoup4&style=flat-square&color=FFD43B)](https://pypi.org/project/beautifulsoup4/)
+[![PyPI](https://img.shields.io/pypi/v/requests?logo=python&label=requests&style=flat-square&color=FFD43B)](https://pypi.org/project/requests/)
+[![PyPI](https://img.shields.io/pypi/v/pgeocode?logo=python&label=pgeocode&style=flat-square&color=FFD43B)](https://pypi.org/project/pgeocode/)
+
+> [!CAUTION]
+> This tool interacts with the Half Price Books (HPB) website to check in-store availability of books. It **bypasses some of HPB's built-in safeguards**.  
+> 
+> ⚠️ **Risks and Important Notes:**
+> - Excessive or automated use may violate HPB's terms of service and could result in **temporary or permanent blocking** of your IP address or account.  
+> - This tool is intended **for personal use only** and **educational purposes**.  
+> - HPB’s website structure and inventory are subject to change. The tool may **stop working at any time**.  
+> - The author does **not condone abusing HPB's systems**. Use responsibly, ethically, and at your own risk.  
+> 
+> By using this tool, you accept full responsibility for your actions and any consequences.
 
 This Python script allows you to:
 
-- Retrieve book titles from a public Amazon wishlist using wishlist-core.
-- Find Half Price Books (HPB) stores in a specific ZIP code.
+- Retrieve book titles from a public Hardcover wishlist using wishlist-core.
+- Find Half Price Books (HPB) stores nearest to you.
 - Check in-store availability of the wishlist books at those HPB stores.
-
-It uses Playwright to simulate a real browser session, ensuring compatibility with HPB's JavaScript-driven site.
 
 Features:
 
-- Extracts all book titles from a public Amazon wishlist.
+- Extracts all book titles from a Hardcover wishlist.
 - Searches for HPB stores by ZIP code.
 - Checks if books are available for in-store pickup.
 - Outputs a list of stores where each book is in stock.
-
-Requirements:
-
-- Python 3.9+
-- playwright
-- wishlist-core
 
 Installation:
 
 1. Clone this repository or copy the script.
 2. Install dependencies:
-   pip install playwright wishlist-core
-3. Install the required browser for Playwright:
-   python -m playwright install
+   `pip install -R requirements.txt`
 
 Configuration:
 
-- Set WISHLIST_ID to your Amazon wishlist code.
-- Set ZIP_CODE to the ZIP code for nearby HPB stores.
-- Set HEADLESS to False to watch the browser actions.
+- Set `HARDCOVER_API_KEY` to the API key associated with your account.\
+This can be found [here](https://hardcover.app/account/api).\
+Run `export HARDCOVER_API_KEY="<your_key>"`
+- Set `ZIP_CODE` to the ZIP code for nearby HPB stores.
 
 Usage:
 
 Run the script:
-python stores.py
+`python stores.py`
 
 Example output:
 
-These are the stores in the zip code 46204: Half Price Books Downtown, HPB Clearwater Village, HPB Broad Ripple
+```bash
+Enter your Zip Code:
+[ZIP CODE]
 
-In-stock at these stores:
+Enter search radius in miles (press Enter for default: 15 | options: 15, 30, 50, 100, 300)
+[SEARCH RADIUS]
 
-"The Hobbit" is available at: HPB Clearwater Village
-"1984" is not in stock at any stores
+Now searching store: [STORE NAME] ([STORE ID])
 
-Notes:
-
-- HPB’s site dynamically loads content via JavaScript. Playwright ensures that the page fully renders before checking for stock.
-- The script currently checks in-store availability only (pickup at the store).
-- For best results, keep HEADLESS=False when debugging.
-
+No results for [Book Title 1] ([Book ID]) at store [STORE ID]
+No results for [Book Title 2] ([Book ID]) at store [STORE ID]
+No results for [Book Title 3] ([Book ID]) at store [STORE ID]
+...
+Successfully found [Book Title X] ([Book ID]) at store [STORE ID]: 
+[HPB Search URL]
+No results for [Book Title Y] ([Book ID]) at store [STORE ID]
+Successfully found [Book Title Z] ([Book ID]) at store [STORE ID]: 
+[HPB Search URL]
+```

@@ -1,2 +1,4 @@
-wishlist~=0.5.3
-playwright~=1.57.0
+cloudscraper~=1.2.71
+beautifulsoup4~=4.14.3
+requests~=2.32.5
+pgeocode~=0.5.0
