@@ -1,9 +1,12 @@
-from bs4 import BeautifulSoup
-from urllib.parse import quote, urlencode
+from argparse import ArgumentParser, ArgumentTypeError
+from json import dumps, loads, JSONDecodeError
 from os import getenv
 from sys import exit
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote, urlencode
+from urllib.request import Request, urlopen
 
-from requests import post
+from bs4 import BeautifulSoup
 from cloudscraper import create_scraper
 from pgeocode import Nominatim
 
@@ -26,14 +29,8 @@ SCRAPER = create_scraper(
 )
 
 
-def get_list_of_stores(zip_code, radius=15):
+def get_list_of_stores(zip_code: str, radius: int = 15) -> list[dict[str, object]]:    
     url = 'https://www.hpb.com/on/demandware.store/Sites-hpb-Site/en_US/Stores-FindStores'
-
-    nomi = Nominatim('us')
-    location = nomi.query_postal_code(zip_code)
-
-    lat = location.latitude
-    lon = location.longitude
 
     payload = {
         'showMap': 'false',
@@ -44,13 +41,22 @@ def get_list_of_stores(zip_code, radius=15):
         'onlyAvailableStores': 'false',
         'isFromPLP': 'false',
         'hiddenPostalCode': zip_code,
-        'lat': lat,
-        'long': lon,
     }
 
-    fin = f"{url}?{urlencode(payload)}"
-    r = SCRAPER.get(fin, data=payload, timeout=15)
-    r.raise_for_status()
+    nomi = Nominatim('us')
+    location = nomi.query_postal_code(zip_code)
+
+    if location.latitude and location.longitude:
+        payload['lat'] = location.latitude
+        payload['long'] = location.longitude
+
+    url = f"{url}?{urlencode(payload)}"
+    r = SCRAPER.get(url, data=payload, timeout=15)
+
+    if r.status_code != 200:
+        raise RuntimeError(
+            f'{RED}HPB store lookup failed ({r.status_code}).{RESET}'
+        )
 
     data = r.json()
     stores = []
@@ -75,7 +81,7 @@ def get_list_of_stores(zip_code, radius=15):
     return stores
 
 
-def get_hpb_product_id(book_title):
+def get_hpb_product_id(book_title: tuple[str, list[str]]) -> str | None:
     query = quote(f'{book_title[0]} {book_title[1][0]}')
     url = (
         'https://www.hpb.com/on/demandware.store/'
@@ -105,7 +111,7 @@ def get_hpb_product_id(book_title):
     return None
 
 
-def get_hardcover_want_to_read():
+def get_hardcover_want_to_read() -> list[dict[str, object]]:
     # StatusId == 1 -> "Want to Read"
     query = '''
     query GetWantToRead {
@@ -124,31 +130,58 @@ def get_hardcover_want_to_read():
     }
     '''
 
-    response = post(
-        'https://api.hardcover.app/v1/graphql',
+    body = dumps({'query': query}).encode('utf-8')
+
+    req = Request(
+        url='https://api.hardcover.app/v1/graphql',
+        data=body,
         headers={
             'Content-Type': 'application/json',
-            'Authorization': HARDCOVER_API_KEY
+            'Authorization': HARDCOVER_API_KEY,
         },
-        json={'query': query}
+        method='POST'
     )
-    response.raise_for_status()
-    payload = response.json()
 
-    books = payload['data']['me'][0]['user_books']  # note the [0] here
+    try:
+        with urlopen(req, timeout=15) as resp:
+            raw = resp.read().decode('utf-8')
+    except HTTPError as e:
+        raise RuntimeError(f'{RED}Hardcover API HTTP error {e.code}{RESET}: {e.read().decode()}')
+    except URLError as e:
+        raise RuntimeError(f'{RED}Hardcover API connection error{RESET}: {e.reason}')
+    except Exception as e:
+        raise RuntimeError(f'{RED}Unexpected error contacting Hardcover API{RESET}: {e}')
+
+    try:
+        payload = loads(raw)
+    except JSONDecodeError:
+        raise RuntimeError(f'{RED}Failed to decode Hardcover API response as JSON{RESET}')
+
+    if 'errors' in payload:
+        raise RuntimeError(f'{RED}Hardcover API GraphQL errors:{RESET} {payload["errors"]}')
+
+    try:
+        books = payload['data']['me'][0]['user_books']
+    except (KeyError, IndexError, TypeError):
+        raise RuntimeError(f'{RED}Unexpected Hardcover API response structure{RESET}')
+
     simplified_books = []
-
     for b in books:
-        book = b['book']
-        authors = [c['author']['name'] for c in book.get('contributions', [])]
-        simplified_books.append({
-            'title': book['title'],
-            'authors': authors
-        })
+        book = b.get('book', {})
+        authors = [
+            c['author']['name']
+            for c in book.get('contributions', [])
+            if c.get('author') and c['author'].get('name')
+        ]
+        if book.get('title'):
+            simplified_books.append({
+                'title': book['title'],
+                'authors': authors
+            })
 
     return simplified_books
 
-def check_hpb_store_availability(store_id, book_id, book_name):
+def check_hpb_store_availability(store_id: str, book_id: str, book_name: str) -> dict:
     url = (
         f'https://www.hpb.com/search?q={book_id}'
         f'&prefn1=instorePickUpAvailableStores'
@@ -159,34 +192,53 @@ def check_hpb_store_availability(store_id, book_id, book_name):
     r.raise_for_status()
 
     soup = BeautifulSoup(r.text, 'html.parser')
-    # look for the 'no results' message
     msg_div = soup.select_one('div.msg')
-    if msg_div and 'We were not able to find any results for' in msg_div.text:
-        print(f'{RED}No results for {book_name} ({book_id}) at store {store_id}{RESET}')
-    else:
-        print(f'{GREEN}Successfully found {book_name} ({book_id}) at store {store_id}: \n{RESET}{CYAN}{url}{RESET}')
-    return url
 
+    found = not (
+        msg_div and 'We were not able to find any results for' in msg_div.text
+    )
+
+    return {
+        'store_id': store_id,
+        'book_id': book_id,
+        'book_name': book_name,
+        'found': found,
+        'url': url,
+    }
+
+
+def zip_code_type(value: str) -> str:
+    if not value.isdigit() or len(value) != 5:
+        raise ArgumentTypeError(f'{RED}ZIP code must be exactly 5 digits{RESET}')
+    return value
 
 if __name__ == '__main__':
     if not HARDCOVER_API_KEY:
         print(f'{RED}Error: HARDCOVER_API_KEY is not set. Exiting.{RESET}')
         exit(1)
-    zip_code = input(f'{CYAN}Enter your Zip Code:{RESET}\n').strip()
-    if not zip_code or not zip_code.isdigit() or len(zip_code) != 5:
-        print(f'{RED}Error: A valid 5-digit ZIP code is required.{RESET}')
-        exit(1)
-    radius_input = input(
-        f'{CYAN}Enter search radius in miles '
-        f'(press Enter for default: 15 | options: 15, 30, 50, 100, 300){RESET}\n'
-    ).strip()
-    if radius_input == '':
-        radius = 15
-    elif radius_input in {'15', '30', '50', '100', '300'}:
-        radius = int(radius_input)
-    else:
-        print(f'{RED}Error: Radius must be one of 15, 30, 50, 100, or 300 miles.{RESET}')
-        exit(1)
+
+    parser = ArgumentParser(
+        description='Finds which Hardcover wishlist ' \
+        'books are in stock at nearby Half Price Books stores.'
+    )
+    parser.add_argument(
+        '--zip',
+        required=True,
+        type=zip_code_type,
+        help='5-digit US ZIP code'
+    )
+    parser.add_argument(
+        '--radius',
+        type=int,
+        choices=[15, 30, 50, 100, 300],
+        default=15,
+        help='Search radius in miles (default: 15)'
+    )
+
+    args = parser.parse_args()
+    zip_code = args.zip.strip()
+    radius = args.radius
+
     stores = get_list_of_stores(zip_code, radius)
     print(f'\n{CYAN}Total stores: {len(stores)}{RESET}')
     book_list = [(book['title'], book['authors']) for book in get_hardcover_want_to_read()]
@@ -198,4 +250,11 @@ if __name__ == '__main__':
     for store in stores:
         print(f'\n{UNDERLINE}{CYAN}Now searching store: {store["name"]} ({store["id"]}){RESET}\n')
         for book_id, title in found_hpb_entries:
-            check_hpb_store_availability(store['id'], book_id, title)
+            result = check_hpb_store_availability(store['id'], book_id, title)
+            if result['found']:
+                print(
+                    f'{GREEN}Found {result["book_name"]} ({book_id}) at store {store["id"]}{RESET}\n'
+                    f'{CYAN}{result["url"]}{RESET}'
+                )
+            else:
+                print(f"{RED}Not found {result['book_name']} at store {store['id']}{RESET}")
