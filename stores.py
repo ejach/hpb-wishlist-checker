@@ -10,10 +10,13 @@ from bs4 import BeautifulSoup
 from cloudscraper import create_scraper
 from pgeocode import Nominatim
 
-# stdout colors
+# stdout colors / unicode emojis
 CYAN = '\033[36m'
 RED = '\033[31m'
 GREEN = '\033[32m'
+YELLOW = '\033[33m'
+CHECK = '\u2714'
+CROSS = '\u2718'
 UNDERLINE = '\033[4m'
 RESET = '\033[0m'
 
@@ -81,8 +84,8 @@ def get_list_of_stores(zip_code: str, radius: int = 15) -> list[dict[str, object
     return stores
 
 
-def get_hpb_product_id(book_title: tuple[str, list[str]]) -> str | None:
-    query = quote(f'{book_title[0]} {book_title[1][0]}')
+def get_hpb_product_id(book_tuple: tuple[str, list[str]]) -> str | None:
+    query = quote(f'{book_tuple[0]} {book_tuple[1][0]}')
     url = (
         'https://www.hpb.com/on/demandware.store/'
         'Sites-hpb-Site/en_US/SearchServices-GetSuggestions'
@@ -100,7 +103,7 @@ def get_hpb_product_id(book_title: tuple[str, list[str]]) -> str | None:
     aria_label = first_product.get('aria-label', '').lower()
     href = first_product.get('href', '')
 
-    if book_title[0].lower() not in aria_label:
+    if book_tuple[0].lower() not in aria_label:
         return None
 
     # Extract M-XXXXX-T (Book ID) or P-XXXXX-USED (Specific Product ID)
@@ -165,7 +168,7 @@ def get_hardcover_want_to_read() -> list[dict[str, object]]:
     except (KeyError, IndexError, TypeError):
         raise RuntimeError(f'{RED}Unexpected Hardcover API response structure{RESET}')
 
-    simplified_books = []
+    books_result = []
     for b in books:
         book = b.get('book', {})
         authors = [
@@ -174,12 +177,12 @@ def get_hardcover_want_to_read() -> list[dict[str, object]]:
             if c.get('author') and c['author'].get('name')
         ]
         if book.get('title'):
-            simplified_books.append({
+            books_result.append({
                 'title': book['title'],
                 'authors': authors
             })
 
-    return simplified_books
+    return books_result
 
 def check_hpb_store_availability(store_id: str, book_id: str, book_name: str) -> dict:
     url = (
@@ -253,8 +256,8 @@ if __name__ == '__main__':
             result = check_hpb_store_availability(store['id'], book_id, title)
             if result['found']:
                 print(
-                    f'{GREEN}Found {result["book_name"]} ({book_id}) at store {store["id"]}{RESET}\n'
+                    f'{GREEN}{CHECK} Found {result["book_name"]} ({book_id}) at store {store["id"]}{RESET}\n'
                     f'{CYAN}{result["url"]}{RESET}'
                 )
             else:
-                print(f"{RED}Not found {result['book_name']} at store {store['id']}{RESET}")
+                print(f"{RED}{CROSS}{RESET}{YELLOW} Not found {result['book_name']} at store {store['id']}{RESET}")
