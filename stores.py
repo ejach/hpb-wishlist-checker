@@ -92,7 +92,6 @@ def get_hpb_product_id(book_tuple: tuple[str, list[str]]) -> str | None:
         f'?q={query}'
     )
     r = SCRAPER.get(url, timeout=10)
-    r.raise_for_status()
 
     soup = BeautifulSoup(r.text, 'html.parser')
 
