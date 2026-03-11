@@ -1,14 +1,25 @@
 from argparse import ArgumentParser, ArgumentTypeError
 from json import dumps, loads, JSONDecodeError
+from logging import INFO, basicConfig, getLogger
 from os import getenv
+from random import choice
 from sys import exit
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
+
 from bs4 import BeautifulSoup
 from cloudscraper import create_scraper
 from pgeocode import Nominatim
+
+
+basicConfig(
+    level=INFO,
+    format=None
+)
+
+logger = getLogger(__name__)
 
 # stdout colors / unicode emojis
 CYAN = '\033[36m'
@@ -22,14 +33,17 @@ RESET = '\033[0m'
 
 HARDCOVER_API_KEY = getenv('HARDCOVER_API_KEY', None)
 
+def init_scraper():
+    browsers = [
+        {'browser': 'chrome', 'platform': 'windows', 'desktop': True},
+        {'browser': 'firefox', 'platform': 'windows', 'desktop': True},
+        {'browser': 'chrome', 'platform': 'linux', 'desktop': True},
+        {'browser': 'firefox', 'platform': 'linux', 'desktop': True},
+    ]
+    return create_scraper(browser=choice(browsers))
+
 # cloudscraper constant
-SCRAPER = create_scraper(
-    browser={
-        'browser': 'chrome',
-        'platform': 'windows',
-        'desktop': True
-    }
-)
+SCRAPER = init_scraper()
 
 
 def get_list_of_stores(zip_code: str, radius: int = 15) -> list[dict[str, object]]:    
@@ -79,7 +93,7 @@ def get_list_of_stores(zip_code: str, radius: int = 15) -> list[dict[str, object
         }
 
         stores.append(store_data)
-        print(f"{CYAN}Found store: {store_data['name']}{RESET}")
+        logger.info(f"{CYAN}Found store: {store_data['name']}{RESET}")
 
     return stores
 
@@ -191,7 +205,6 @@ def check_hpb_store_availability(store_id: str, book_id: str, book_name: str) ->
         f'&srule=best-matches&sz=20&bopisStoreId={store_id}'
     )
     r = SCRAPER.get(url, timeout=10)
-    r.raise_for_status()
 
     soup = BeautifulSoup(r.text, 'html.parser')
     msg_div = soup.select_one('div.msg')
@@ -216,7 +229,7 @@ def zip_code_type(value: str) -> str:
 
 if __name__ == '__main__':
     if not HARDCOVER_API_KEY:
-        print(f'{RED}Error: HARDCOVER_API_KEY is not set. Exiting.{RESET}')
+        logger.info(f'{RED}Error: HARDCOVER_API_KEY is not set. Exiting.{RESET}')
         exit(1)
 
     parser = ArgumentParser(
@@ -242,7 +255,7 @@ if __name__ == '__main__':
     radius = args.radius
 
     stores = get_list_of_stores(zip_code, radius)
-    print(f'\n{CYAN}Total stores: {len(stores)}{RESET}')
+    logger.info(f'\n{CYAN}Total stores: {len(stores)}{RESET}')
     book_list = [(book['title'], book['authors']) for book in get_hardcover_want_to_read()]
     found_hpb_entries = []
     for x in book_list:
@@ -250,13 +263,13 @@ if __name__ == '__main__':
         if book_id:
             found_hpb_entries.append((book_id, x[0]))
     for store in stores:
-        print(f'\n{UNDERLINE}{CYAN}Now searching store: {store["name"]} ({store["id"]}){RESET}\n')
+        logger.info(f'\n{UNDERLINE}{CYAN}Now searching store: {store["name"]} ({store["id"]}){RESET}\n')
         for book_id, title in found_hpb_entries:
             result = check_hpb_store_availability(store['id'], book_id, title)
             if result['found']:
-                print(
+                logger.info(
                     f'{GREEN}{CHECK} Found {result["book_name"]} ({book_id}) at store {store["id"]}{RESET}\n'
                     f'{CYAN}{result["url"]}{RESET}'
                 )
             else:
-                print(f"{RED}{CROSS}{RESET}{YELLOW} Not found {result['book_name']} at store {store['id']}{RESET}")
+                logger.info(f"{RED}{CROSS}{RESET}{YELLOW} Not found {result['book_name']} at store {store['id']}{RESET}")
