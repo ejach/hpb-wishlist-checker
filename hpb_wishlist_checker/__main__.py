@@ -12,7 +12,7 @@ from bs4 import BeautifulSoup
 from cloudscraper import create_scraper
 from pgeocode import Nominatim
 
-from hpb_wishlist_checker.spinner.spinner import Loading
+from hpb_wishlist_checker.spinner import Loading
 
 
 basicConfig(
