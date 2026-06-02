@@ -3,15 +3,16 @@ from json import dumps, loads, JSONDecodeError
 from logging import INFO, basicConfig, getLogger
 from os import getenv
 from random import choice
-from sys import exit
+from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
-
 from bs4 import BeautifulSoup
 from cloudscraper import create_scraper
 from pgeocode import Nominatim
+
+from hpb_wishlist_checker.spinner.spinner import Loading
 
 
 basicConfig(
@@ -20,6 +21,7 @@ basicConfig(
 )
 
 logger = getLogger(__name__)
+LOADING = Loading()
 
 # stdout colors / unicode emojis
 CYAN = '\033[36m'
@@ -33,14 +35,25 @@ RESET = '\033[0m'
 
 HARDCOVER_API_KEY = getenv('HARDCOVER_API_KEY', None)
 
-def init_scraper():
-    browsers = [
-        {'browser': 'chrome', 'platform': 'windows', 'desktop': True},
-        {'browser': 'firefox', 'platform': 'windows', 'desktop': True},
-        {'browser': 'chrome', 'platform': 'linux', 'desktop': True},
-        {'browser': 'firefox', 'platform': 'linux', 'desktop': True},
-    ]
-    return create_scraper(browser=choice(browsers))
+BROWSER_PROFILES = [
+    {'browser': 'chrome', 'platform': 'windows', 'desktop': True},
+    {'browser': 'firefox', 'platform': 'windows', 'desktop': True},
+    {'browser': 'chrome', 'platform': 'linux', 'desktop': True},
+    {'browser': 'firefox', 'platform': 'linux', 'desktop': True},
+]
+
+
+def init_scraper() -> Any:
+    scraper = create_scraper(browser=choice(BROWSER_PROFILES))
+
+    scraper.headers.update({
+        'Accept': 'text/html,application/json,application/xhtml+xml',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+    })
+
+    return scraper
 
 # cloudscraper constant
 SCRAPER = init_scraper()
@@ -67,7 +80,7 @@ def get_list_of_stores(zip_code: str, radius: int = 15) -> list[dict[str, object
         payload['lat'] = location.latitude
         payload['long'] = location.longitude
 
-    url = f"{url}?{urlencode(payload)}"
+    url = f'{url}?{urlencode(payload)}'
     r = SCRAPER.get(url, data=payload, timeout=15)
 
     if r.status_code != 200:
@@ -107,9 +120,9 @@ def get_hpb_product_id(book_tuple: tuple[str, list[str]]) -> str | None:
     )
     r = SCRAPER.get(url, timeout=10)
 
-    soup = BeautifulSoup(r.text, 'html.parser')
+    soup = BeautifulSoup(r.text, 'lxml')
 
-    first_product = soup.select_one('span[id^="product-"] a')
+    first_product = soup.select_one("span[id^='product-'] a")
     if not first_product:
         return None
 
@@ -229,8 +242,9 @@ def zip_code_type(value: str) -> str:
 
 if __name__ == '__main__':
     if not HARDCOVER_API_KEY:
-        logger.info(f'{RED}Error: HARDCOVER_API_KEY is not set. Exiting.{RESET}')
-        exit(1)
+        raise SystemExit(
+            f'{RED}Error: HARDCOVER_API_KEY is not set. Exiting.{RESET}'
+        )
 
     parser = ArgumentParser(
         description='Finds which Hardcover wishlist ' \
@@ -255,13 +269,20 @@ if __name__ == '__main__':
     radius = args.radius
 
     stores = get_list_of_stores(zip_code, radius)
+    if not stores:
+        raise SystemExit(
+            f'{RED}{CROSS}{RESET}{YELLOW} No stores found near '
+            f'{zip_code} within {radius} miles. Exiting.{RESET}'
+        )
     logger.info(f'\n{CYAN}Total stores: {len(stores)}{RESET}')
     book_list = [(book['title'], book['authors']) for book in get_hardcover_want_to_read()]
     found_hpb_entries = []
     for x in book_list:
         book_id = get_hpb_product_id(x)
         if book_id:
+            LOADING.start(text=f'{str(len(found_hpb_entries))} -> {x[0]}')
             found_hpb_entries.append((book_id, x[0]))
+    LOADING.succeed(f'Matched {len(found_hpb_entries)} wishlisted books in the Half Price Books catalog.')
     for store in stores:
         logger.info(f'\n{UNDERLINE}{CYAN}Now searching store: {store["name"]} ({store["id"]}){RESET}\n')
         for book_id, title in found_hpb_entries:
