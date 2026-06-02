@@ -42,8 +42,9 @@ Run `export HARDCOVER_API_KEY="<your_key>"`
 ### Usage
 
 ```bash
-usage: stores.py [-h] --zip ZIP [--radius {15,30,50,100,300}]
-
+usage:
+  python -m hpb_wishlist_checker --zip 90210
+  python -m hpb_wishlist_checker --zip 90210 --radius 50
 Finds which Hardcover wishlist books are in stock at nearby Half Price Books stores.
 
 options:
@@ -54,7 +55,7 @@ options:
 ```
 
 Run the script:
-`python stores.py --zip <zip_code>`
+`python -m hpb_wishlist_checker --zip <zip_code>`
 
 Example output:
 
