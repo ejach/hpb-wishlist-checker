@@ -112,7 +112,7 @@ def get_list_of_stores(zip_code: str, radius: int = 15) -> list[dict[str, object
 
 
 def get_hpb_product_id(book_tuple: tuple[str, list[str]]) -> str | None:
-    query = quote(f'{book_tuple[0]} {book_tuple[1][0]}')
+    query = quote(f'{book_tuple[0]} {book_tuple[1][0] if len(book_tuple) > 1 and book_tuple[1] else ""}')
     url = (
         'https://www.hpb.com/on/demandware.store/'
         'Sites-hpb-Site/en_US/SearchServices-GetSuggestions'
